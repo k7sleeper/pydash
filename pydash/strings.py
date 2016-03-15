@@ -166,7 +166,10 @@ DEBURRED_LETTERS = {
 }
 
 # Use Javascript style regex to make Lo-Dash compatibility easier.
-RE_WORDS = '/[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*)|[A-Z]?[a-z]+[0-9]*|[A-Z]+|[0-9]+/g'
+UPPER = '[A-Z\\xC0-\\xD6\\xD8-\\xDE]'
+LOWER = '[a-z\\xDf-\\xF6\\xF8-\\xFF]+'
+RE_WORDS = ('/{upper}+(?={upper}{lower})|{upper}?{lower}|{upper}+|[0-9]+/g'
+            .format(upper=UPPER, lower=LOWER))
 RE_LATIN1 = '/[\xC0-\xFF]/g'
 
 
@@ -1795,11 +1798,13 @@ def url(*paths, **params):
     return urlunsplit((scheme, netloc, path, query, fragment))
 
 
-def words(text):
+def words(text, pattern=None):
     """Return list of words contained in `text`.
 
     Args:
         text (str): String to split.
+        pattern (str, optional): Custom pattern to split words on. Defaults to
+            ``None``.
 
     Returns:
         list: List of words.
@@ -1808,10 +1813,18 @@ def words(text):
 
         >>> words('a b, c; d-e')
         ['a', 'b', 'c', 'd', 'e']
+        >>> words('fred, barney, & pebbles', '/[^, ]+/g')
+        ['fred', 'barney', '&', 'pebbles']
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.2.0
+        Added `pattern` argument.
+
+    .. verionchanged:: 3.2.0
+        Improved matching for one character words.
     """
-    return js_match(text, RE_WORDS)
+    return js_match(text, pattern or RE_WORDS)
 
 
 #

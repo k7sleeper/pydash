@@ -25,6 +25,8 @@ __all__ = (
     'matches',
     'matches_property',
     'memoize',
+    'method',
+    'method_of',
     'noop',
     'now',
     'prop',
@@ -112,7 +114,7 @@ def deep_property(path):
 
     .. versionadded:: 1.0.0
     """
-    return lambda obj: pyd.deep_get(obj, path)
+    return lambda obj: pyd.get(obj, path)
 
 
 deep_prop = deep_property
@@ -198,16 +200,22 @@ def iteratee(func):
     """
     if callable(func):
         cbk = func
-    elif isinstance(func, string_types):
-        cbk = deep_prop(func)
-    elif isinstance(func, (list, tuple)) and len(func) == 1:
-        cbk = prop(func[0])
-    elif isinstance(func, (list, tuple)) and len(func) > 1:
-        cbk = matches_property(*func[:2])
-    elif isinstance(func, dict):
-        cbk = matches(func)
     else:
-        cbk = identity
+        if isinstance(func, string_types):
+            cbk = deep_prop(func)
+        elif isinstance(func, (list, tuple)) and len(func) == 1:
+            cbk = prop(func[0])
+        elif isinstance(func, (list, tuple)) and len(func) > 1:
+            cbk = matches_property(*func[:2])
+        elif isinstance(func, dict):
+            cbk = matches(func)
+        else:
+            cbk = identity
+
+        # Optimize callback by specifying the exact number of arguments the
+        # callback takes so that arg inspection (costly process) can be
+        # skipped in helpers.callit().
+        cbk._argcount = 1
 
     return cbk
 
@@ -268,7 +276,8 @@ def matches_property(key, value):
 
     .. versionadded:: 3.1.0
     """
-    return lambda obj: matches(value)(prop(key)(obj))
+    prop_key = prop(key)
+    return lambda obj: matches(value)(prop_key(obj))
 
 
 def memoize(func, resolver=None):
@@ -313,6 +322,67 @@ def memoize(func, resolver=None):
     memoized.cache = {}
 
     return memoized
+
+
+def method(path, *args, **kargs):
+    """Creates a function that invokes the method at `path` on a given object.
+    Any additional arguments are provided to the invoked method.
+
+    Args:
+        path (str): Object path of method to invoke.
+        *args (mixed): Global arguments to apply to method when invoked.
+        **kargs (mixed): Global keyword argument to apply to method when
+            invoked.
+
+    Returns:
+        function: Function that invokes method located at path for object.
+
+    Example:
+
+        >>> obj = {'a': {'b': [None, lambda x: x]}}
+        >>> echo = method('a.b.1')
+        >>> echo(obj, 1) == 1
+        True
+        >>> echo(obj, 'one') == 'one'
+        True
+
+    .. versionadded:: 3.3.0
+    """
+    def _method(obj, *_args, **_kargs):
+        func = pyd.partial(pyd.get(obj, path), *args, **kargs)
+        return func(*_args, **_kargs)
+    return _method
+
+
+def method_of(obj, *args, **kargs):
+    """The opposite of :func:`method`. This method creates a function that
+    invokes the method at a given path on object. Any additional arguments are
+    provided to the invoked method.
+
+    Args:
+        obj (mixed): The object to query.
+        *args (mixed): Global arguments to apply to method when invoked.
+        **kargs (mixed): Global keyword argument to apply to method when
+            invoked.
+
+    Returns:
+        function: Function that invokes method located at path for object.
+
+    Example:
+
+        >>> obj = {'a': {'b': [None, lambda x: x]}}
+        >>> dispatch = method_of(obj)
+        >>> dispatch('a.b.1', 1) == 1
+        True
+        >>> dispatch('a.b.1', 'one') == 'one'
+        True
+
+    .. versionadded:: 3.3.0
+    """
+    def _method_of(path, *_args, **_kargs):
+        func = pyd.partial(pyd.get(obj, path), *args, **kargs)
+        return func(*_args, **_kargs)
+    return _method_of
 
 
 def noop(*args, **kargs):  # pylint: disable=unused-argument

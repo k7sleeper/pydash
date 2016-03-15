@@ -177,6 +177,7 @@ def test_invoke(case, expected):
     (([1, 2, 3],), [1, 2, 3], False),
     (([1.1, 2.1, 3.1], int), [1, 2, 3], False),
     (([1, 2, 3], lambda num: num * 3), [3, 6, 9], False),
+    (([[1], [2, 3], [4, 5, 6]], len), [1, 2, 3], False),
     (({'one': 1, 'two': 2, 'three': 3}, lambda num: num * 3),
      [3, 6, 9],
      True),
@@ -575,9 +576,38 @@ def test_sort_by(case, expected):
                     {'user': 'barney', 'age': 36},
                     {'user': 'fred', 'age': 30},
                     {'user': 'fred', 'age': 40}]))),
+    (([{'user': 'barney', 'age': 36},
+       {'user': 'fred', 'age': 40},
+       {'user': 'barney', 'age': 26},
+       {'user': 'fred', 'age': 30}],
+      ['user', 'age'],
+      [False, True],
+      True),
+     list(reversed([{'user': 'fred', 'age': 30},
+                    {'user': 'fred', 'age': 40},
+                    {'user': 'barney', 'age': 26},
+                    {'user': 'barney', 'age': 36}]))),
+    (([{'user': 'barney', 'age': 36},
+       {'user': 'fred', 'age': 40},
+       {'user': 'barney', 'age': 26},
+       {'user': 'fred', 'age': 30}],
+      ['user', 'age'],
+      [False],
+      True),
+     list(reversed([{'user': 'fred', 'age': 30},
+                    {'user': 'fred', 'age': 40},
+                    {'user': 'barney', 'age': 26},
+                    {'user': 'barney', 'age': 36}]))),
 ])
 def test_sort_by_all(case, expected):
     assert _.sort_by_all(*case) == expected
+
+
+@parametrize('case', [
+    _.sort_by_order
+])
+def test_sort_by_all_aliases(case):
+    assert _.sort_by_all is case
 
 
 @parametrize('case,expected', [

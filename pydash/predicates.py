@@ -25,6 +25,10 @@ from ._compat import (
 
 
 __all__ = (
+    'gt',
+    'gte',
+    'lt',
+    'lte',
     'in_range',
     'is_associative',
     'is_blank',
@@ -45,6 +49,7 @@ __all__ = (
     'is_instance_of',
     'is_integer',
     'is_int',
+    'is_iterable',
     'is_json',
     'is_list',
     'is_match',
@@ -70,6 +75,102 @@ __all__ = (
 
 
 RegExp = type(re.compile(''))
+
+
+def gt(value, other):
+    """Checks if `value` is greater than `other`.
+
+    Args:
+        value (number): Value to compare.
+        other (number): Other value to compare.
+
+    Returns:
+        bool: Whether `value` is greater than `other`.
+
+    Example:
+
+        >>> gt(5, 3)
+        True
+        >>> gt(3, 5)
+        False
+        >>> gt(5, 5)
+        False
+
+    .. versionadded:: 3.3.0
+    """
+    return value > other
+
+
+def gte(value, other):
+    """Checks if `value` is greater than or equal to `other`.
+
+    Args:
+        value (number): Value to compare.
+        other (number): Other value to compare.
+
+    Returns:
+        bool: Whether `value` is greater than or equal to `other`.
+
+    Example:
+
+        >>> gte(5, 3)
+        True
+        >>> gte(3, 5)
+        False
+        >>> gte(5, 5)
+        True
+
+    .. versionadded:: 3.3.0
+    """
+    return value >= other
+
+
+def lt(value, other):
+    """Checks if `value` is less than `other`.
+
+    Args:
+        value (number): Value to compare.
+        other (number): Other value to compare.
+
+    Returns:
+        bool: Whether `value` is less than `other`.
+
+    Example:
+
+        >>> lt(5, 3)
+        False
+        >>> lt(3, 5)
+        True
+        >>> lt(5, 5)
+        False
+
+    .. versionadded:: 3.3.0
+    """
+    return value < other
+
+
+def lte(value, other):
+    """Checks if `value` is less than or equal to `other`.
+
+    Args:
+        value (number): Value to compare.
+        other (number): Other value to compare.
+
+    Returns:
+        bool: Whether `value` is less than or equal to `other`.
+
+    Example:
+
+        >>> lte(5, 3)
+        False
+        >>> lte(3, 5)
+        True
+        >>> lte(5, 5)
+        True
+
+    .. versionadded:: 3.3.0
+    """
+    return value <= other
 
 
 def in_range(value, start=0, end=None):
@@ -210,7 +311,7 @@ def is_builtin(value):
     """Checks if `value` is a Python builtin function or method.
 
     Args:
-        value (callable): Value to check.
+        value (function): Value to check.
 
     Returns:
         bool: Whether `value` is a Python builtin function or method.
@@ -230,8 +331,10 @@ def is_builtin(value):
 
     .. versionadded:: 3.0.0
     """
-    return (value in builtins.__dict__.values() or
-            isinstance(value, BuiltinFunctionType))
+    try:
+        return isinstance(value, BuiltinFunctionType) or value in builtins
+    except TypeError:  # pragma: no cover
+        return False
 
 
 is_native = is_builtin
@@ -579,7 +682,7 @@ def is_integer(value):
         value (mixed): Value to check.
 
     Returns:
-        bool: Whether `value` is a integer.
+        bool: Whether `value` is an integer.
 
     Example:
 
@@ -603,6 +706,38 @@ def is_integer(value):
 
 
 is_int = is_integer
+
+
+def is_iterable(value):
+    """Checks if `value` is an iterable.
+
+    Args:
+        value (mixed): Value to check.
+
+    Returns:
+        bool: Whether `value is an iterable.
+
+    Example:
+
+        >>> is_iterable([])
+        True
+        >>> is_iterable({})
+        True
+        >>> is_iterable(())
+        True
+        >>> is_iterable(5)
+        False
+        >>> is_iterable(True)
+        False
+
+    .. versionadded:: 3.3.0
+    """
+    try:
+        iter(value)
+    except TypeError:
+        return False
+    else:
+        return True
 
 
 def is_json(value):
@@ -685,6 +820,10 @@ def is_match(obj, source, callback=None):
         True
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.2.0
+        Don't compare `obj` and `source` using ``type``. Use ``isinstance``
+        exclusively.
     """
     # If callback provided, use it for comparision.
     equal = callback(obj, source) if callable(callback) else None
@@ -692,14 +831,14 @@ def is_match(obj, source, callback=None):
     # Return callback results if anything but None.
     if equal is not None:
         pass
-    elif (type(obj) is type(source) and
-          isinstance(obj, (list, dict, tuple)) and
-          isinstance(source, (list, dict, tuple))):
+    elif (isinstance(obj, dict) and isinstance(source, dict) or
+          isinstance(obj, list) and isinstance(source, list) or
+          isinstance(obj, tuple) and isinstance(source, tuple)):
         # Walk a/b to determine equality.
         for key, value in iterator(source):
-            if pyd.has(obj, key):
+            try:
                 equal = is_match(obj[key], value, callback)
-            else:
+            except Exception:  # pylint: disable=broad-except
                 equal = False
 
             if not equal:

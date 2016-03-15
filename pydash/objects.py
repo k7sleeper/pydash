@@ -17,7 +17,8 @@ from .helpers import (
     get_item,
     set_item,
     NoValue,
-    call_callback
+    callit,
+    getargcount
 )
 from ._compat import iteritems, text_type
 
@@ -32,6 +33,7 @@ __all__ = (
     'deep_set',
     'deep_map_values',
     'defaults',
+    'defaults_deep',
     'extend',
     'find_key',
     'find_last_key',
@@ -39,12 +41,14 @@ __all__ = (
     'for_in_right',
     'for_own',
     'for_own_right',
+    'get',
     'get_path',
     'has',
     'has_path',
     'invert',
     'keys',
     'keys_in',
+    'map_keys',
     'map_values',
     'merge',
     'methods',
@@ -53,6 +57,7 @@ __all__ = (
     'parse_int',
     'pick',
     'rename_keys',
+    'set_',
     'set_path',
     'to_boolean',
     'to_dict',
@@ -111,12 +116,18 @@ def assign(obj, *sources, **kargs):
     if callback is None and callable(sources[-1]):
         callback = sources.pop()
 
+    argcount = (getargcount(callback, maxargs=2) if callback is not None
+                else None)
+
     for source in sources:
         source = clone_deep(source)
 
         for key, value in iteritems(source):
             obj[key] = (value if callback is None
-                        else call_callback(callback, obj.get(key), value))
+                        else callit(callback,
+                                    obj.get(key),
+                                    value,
+                                    argcount=argcount))
 
     return obj
 
@@ -229,69 +240,6 @@ def clone_deep(value, callback=None):
     return clone(value, is_deep=True, callback=callback)
 
 
-def deep_get(obj, path):
-    """Get the value at any depth of a nested object based on the path
-    described by `path`. If path doesn't exist, ``None`` is returned.
-
-    Args:
-        obj (list|dict): Object to process.
-        keys (str|list): List or ``.`` delimited string of keys describing
-            path.
-
-    Returns:
-        mixed: Value of `obj` at path.
-
-    Example:
-
-        >>> deep_get({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.1')
-        2
-        >>> deep_get({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.2') is None
-        True
-
-    .. versionadded:: 2.2.0
-    """
-    return get_path(obj, path)
-
-
-def deep_has(obj, path):
-    """Checks if `path` exists as a key of `obj`.
-
-    Args:
-        obj (mixed): Object to test.
-        path (mixed): Path to test for. Can be a list of nested keys or a ``.``
-            delimited string of path describing the path.
-
-    Returns:
-        bool: Whether `obj` has `path`.
-
-    Example:
-
-        >>> deep_has({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.1')
-        True
-        >>> deep_has({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.2')
-        False
-
-    See Also:
-        - :func:`deep_has` (main definition)
-        - :func:`has_path` (alias)
-
-    .. versionadded:: 2.2.0
-
-    .. versionchanged:: 3.0.0
-        Return ``False`` on ``ValueError`` when checking path.
-    """
-    try:
-        get_path(obj, path, default=NoValue)
-        exists = True
-    except (KeyError, IndexError, TypeError, ValueError):
-        exists = False
-
-    return exists
-
-
-has_path = deep_has
-
-
 def deep_map_values(obj, callback=None, property_path=NoValue):
     """Map all non-object values in `obj` with return values from `callback`.
     The callback is invoked with two arguments: ``(obj_value, property_path)``
@@ -300,7 +248,7 @@ def deep_map_values(obj, callback=None, property_path=NoValue):
 
     Args:
         obj (list|dict): Object to map.
-        callback (callable): Callback applied to each value.
+        callback (function): Callback applied to each value.
 
     Returns:
         mixed: The modified object.
@@ -332,33 +280,7 @@ def deep_map_values(obj, callback=None, property_path=NoValue):
                                                pyd.flatten([properties, key])))
         return pyd.extend(obj, map_values(obj, deep_callback))
     else:
-        return call_callback(callback, obj, properties)
-
-
-def deep_set(obj, path, value):
-    """Sets the value of an object described by `path`. If any part of the
-    object path doesn't exist, it will be created.
-
-    Args:
-        obj (list|dict): Object to modify.
-        path (str | list): Target path to set value to.
-        value (mixed): Value to set.
-
-    Returns:
-        mixed: Modified `obj`.
-
-    Example:
-
-        >>> deep_set({}, 'a.b.c', 1)
-        {'a': {'b': {'c': 1}}}
-        >>> deep_set({}, 'a.0.c', 1)
-        {'a': {'0': {'c': 1}}}
-        >>> deep_set([1, 2], '2.0', 1)
-        [1, 2, [1]]
-
-    .. versionadded:: 2.2.0
-    """
-    return set_path(obj, value, path_keys(path))
+        return callit(callback, obj, properties)
 
 
 def defaults(obj, *sources):
@@ -391,6 +313,37 @@ def defaults(obj, *sources):
             obj.setdefault(key, value)
 
     return obj
+
+
+def defaults_deep(obj, *sources):
+    """This method is like :func:`defaults` except that it recursively assigns
+    default properties.
+
+    Args:
+        obj (dict): Destination object whose properties will be modified.
+        sources (dict): Source objects to assign to `obj`.
+
+    Returns:
+        dict: Modified `obj`.
+
+    Warning:
+        `obj` is modified in place.
+
+    Example:
+
+        >>> obj = {'a': {'b': 1}}
+        >>> obj2 = defaults_deep(obj, {'a': {'b': 2, 'c': 3}})
+        >>> obj is obj2
+        True
+        >>> obj == {'a': {'b': 1, 'c': 3}}
+        True
+
+    .. versionadded:: 3.3.0
+    """
+    def setter(obj, key, value):
+        obj.setdefault(key, value)
+
+    return merge(obj, *sources, _setter=setter)
 
 
 def find_key(obj, callback=None):
@@ -497,7 +450,7 @@ def for_in_right(obj, callback=None):
 for_own_right = for_in_right
 
 
-def get_path(obj, path, default=None):
+def get(obj, path, default=None):
     """Get the value at any depth of a nested object based on the path
     described by `path`. If path doesn't exist, `default` is returned.
 
@@ -515,15 +468,29 @@ def get_path(obj, path, default=None):
 
     Example:
 
-        >>> get_path({}, 'a.b.c') is None
+        >>> get({}, 'a.b.c') is None
         True
-        >>> get_path({'a': {'b': {'c': [1, 2, 3, 4]}}}, 'a.b.c.1')
+        >>> get({'a': {'b': {'c': [1, 2, 3, 4]}}}, 'a.b.c.1')
         2
+        >>> get({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.1')
+        2
+        >>> get({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.2') is None
+        True
+
+    See Also:
+        - :func:`get` (main definition)
+        - :func:`get_path` (alias)
+        - :func:`deep_get` (alias)
 
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 2.2.0
         Support escaping "." delimiter in single string path key.
+
+    .. versionchanged:: 3.3.0
+
+        - Added :func:`get` as main definition and :func:`get_path` as alias.
+        - Made :func:`deep_get` an alias.
     """
     for key in path_keys(path):
         obj = get_item(obj, key, default=default)
@@ -533,15 +500,20 @@ def get_path(obj, path, default=None):
     return obj
 
 
-def has(obj, key):
-    """Checks if `key` exists as a key of `obj`.
+get_path = get
+deep_get = get
+
+
+def has(obj, path):
+    """Checks if `path` exists as a key of `obj`.
 
     Args:
         obj (mixed): Object to test.
-        key (mixed): Key to test for.
+        path (mixed): Path to test for. Can be a list of nested keys or a ``.``
+            delimited string of path describing the path.
 
     Returns:
-        bool: Whether `obj` has `key`.
+        bool: Whether `obj` has `path`.
 
     Example:
 
@@ -551,10 +523,37 @@ def has(obj, key):
         True
         >>> has({'a': 1, 'b': 2}, 'c')
         False
+        >>> has({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.1')
+        True
+        >>> has({'a': {'b': [0, {'c': [1, 2]}]}}, 'a.b.1.c.2')
+        False
+
+    See Also:
+        - :func:`has` (main definition)
+        - :func:`deep_has` (alias)
+        - :func:`has_path` (alias)
 
     .. versionadded:: 1.0.0
+
+    .. versionchanged:: 3.0.0
+        Return ``False`` on ``ValueError`` when checking path.
+
+    .. verisionchanged:: 3.3.0
+
+        - Added :func:`deep_has` as alias.
+        - Added :func:`has_path` as alias.
     """
-    return deep_has(obj, [key])
+    try:
+        get(obj, path, default=NoValue)
+        exists = True
+    except (KeyError, IndexError, TypeError, ValueError):
+        exists = False
+
+    return exists
+
+
+deep_has = has
+has_path = has
 
 
 def invert(obj, multivalue=False):
@@ -625,6 +624,36 @@ def keys(obj):
 
 
 keys_in = keys
+
+
+def map_keys(obj, callback=None):
+    """Creates an object with the same values as `obj` and keys generated by
+    running each property of `obj` through the `callback`. The callback is
+    invoked with three arguments: ``(value, key, object)``. If a property name
+    is provided for `callback` the created :func:`pydash.collections.pluck`
+    style callback will return the property value of the given element. If an
+    object is provided for callback the created
+    :func:`pydash.collections.where` style callback will return ``True``
+    for elements that have the properties of the given object, else ``False``.
+
+    Args:
+        obj (list|dict): Object to map.
+        callback (mixed): Callback applied per iteration.
+
+    Returns:
+        list|dict: Results of running `obj` through `callback`.
+
+    Example:
+
+        >>> callback = lambda value, key: key * 2
+        >>> results = map_keys({'a': 1, 'b': 2, 'c': 3}, callback)
+        >>> results == {'aa': 1, 'bb': 2, 'cc': 3}
+        True
+
+    .. versionadded:: 3.3.0
+    """
+    return dict((result, value)
+                for result, value, _, _ in itercallback(obj, callback))
 
 
 def map_values(obj, callback=None):
@@ -700,10 +729,14 @@ def merge(obj, *sources, **kargs):
     .. versionchanged:: 2.3.2
         Allow `callback` to be passed by reference if it is the last positional
         argument.
+
+    .. versionchanged:: 3.3.0
+        Added internal option for overriding the default setter for obj values.
     """
     sources = list(sources)
     _clone = kargs.get('_clone', True)
     callback = kargs.get('callback')
+    setter = kargs.get('_setter', set_item)
 
     if callback is None and callable(sources[-1]):
         callback = sources.pop()
@@ -723,11 +756,14 @@ def merge(obj, *sources, **kargs):
             if callback:
                 result = callback(obj_value, src_value)
             elif all_sequences or all_mappings:
-                result = merge(obj_value, src_value, _clone=False)
+                result = merge(obj_value,
+                               src_value,
+                               _clone=False,
+                               _setter=setter)
             else:
                 result = src_value
 
-            set_item(obj, key, result)
+            setter(obj, key, result)
 
     return obj
 
@@ -765,8 +801,12 @@ def omit(obj, callback=None, *properties):
         def callback(value, key, item):
             return key in properties
 
+        argcount = 3
+    else:
+        argcount = getargcount(callback, maxargs=3)
+
     return dict((key, value) for key, value in iterator(obj)
-                if not call_callback(callback, value, key, obj))
+                if not callit(callback, value, key, obj, argcount=argcount))
 
 
 def pairs(obj):
@@ -869,8 +909,13 @@ def pick(obj, callback=None, *properties):
         def callback(value, key, item):
             return key in properties
 
+        argcount = 3
+    else:
+        argcount = getargcount(callback, maxargs=3)
+
+    # TODO: cache argcount
     return dict((key, value) for key, value in iterator(obj)
-                if call_callback(callback, value, key, obj))
+                if callit(callback, value, key, obj, argcount=argcount))
 
 
 def rename_keys(obj, key_map):
@@ -894,6 +939,38 @@ def rename_keys(obj, key_map):
     """
     return dict((key_map.get(key, key), value)
                 for key, value in iteritems(obj))
+
+
+def set_(obj, path, value):
+    """Sets the value of an object described by `path`. If any part of the
+    object path doesn't exist, it will be created.
+
+    Args:
+        obj (list|dict): Object to modify.
+        path (str | list): Target path to set value to.
+        value (mixed): Value to set.
+
+    Returns:
+        mixed: Modified `obj`.
+
+    Example:
+
+        >>> set_({}, 'a.b.c', 1)
+        {'a': {'b': {'c': 1}}}
+        >>> set_({}, 'a.0.c', 1)
+        {'a': {'0': {'c': 1}}}
+        >>> set_([1, 2], '2.0', 1)
+        [1, 2, [1]]
+
+    .. versionadded:: 2.2.0
+
+    .. versionchanged:: 3.3.0
+        Added :func:`set_` as main definition and :func:`deep_set` as alias.
+    """
+    return set_path(obj, value, path_keys(path))
+
+
+deep_set = set_
 
 
 def set_path(obj, value, keys, default=None):
@@ -1114,8 +1191,15 @@ def transform(obj, callback=None, accumulator=None):
     if accumulator is None:
         accumulator = []
 
+    argcount = getargcount(callback, maxargs=4)
+
     walk = (None for key, item in iterator(obj)
-            if call_callback(callback, accumulator, item, key, obj) is False)
+            if callit(callback,
+                      accumulator,
+                      item,
+                      key,
+                      obj,
+                      argcount=argcount) is False)
     next(walk, None)
 
     return accumulator
@@ -1129,7 +1213,7 @@ def update_path(obj, callback, keys, default=None):
 
     Args:
         obj (list|dict): Object to modify.
-        callback (callable): Function that returns updated value.
+        callback (function): Function that returns updated value.
         keys (list): A list of string keys that describe the object path to
             modify.
         default (mixed, optional): Default value to assign if path part is not
@@ -1216,7 +1300,7 @@ def path_keys(keys):
     list of keys.
     """
     # pylint: disable=redefined-outer-name
-    if pyd.is_string(keys):
+    if pyd.is_string(keys) and ('.' in keys or '[' in keys):
         # This matches "." as delimiter unless it is escaped by "//".
         re_dot_delim = re.compile(r'(?<!\\)(?:\\\\)*\.')
 
@@ -1229,7 +1313,7 @@ def path_keys(keys):
         keys = [int(key[1:-1]) if re_list_index.match(key)
                 else unescape_path_key(key)
                 for key in re_dot_delim.split(keys)]
-    elif pyd.is_number(keys):
+    elif pyd.is_string(keys) or pyd.is_number(keys):
         keys = [keys]
     elif keys is NoValue:
         keys = []

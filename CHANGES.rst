@@ -4,6 +4,72 @@ Changelog
 =========
 
 
+v3.4.1 (2015-11-03)
+-------------------
+
+- Fix Python 3.5, inspect, and  pytest compatibility issue with ``py_`` chaining object when doctest run on ``pydash.__init__.py``.
+
+
+v3.4.0 (2015-09-22)
+-------------------
+
+- Optimize callback system for performance.
+
+  - Explicitly store arg count on callback for ``pydash`` generated callbacks where the arg count is known. This avoids the costly ``inspect.getargspec`` call.
+  - Eliminate usage of costly ``guess_builtin_argcount`` which parsed docstrings, and instead only ever pass a single argument to a builtin callback function.
+
+- Optimize ``get``/``set`` so that regex parsing is only done when special characters are contained in the path key whereas before, all string paths were parsed.
+- Optimize ``is_builtin`` by checking for ``BuiltinFunctionType`` instance and then using ``dict`` look up table instead of a ``list`` look up.
+- Optimize ``is_match`` by replacing call to ``has`` with a ``try/except`` block.
+- Optimize ``push``/``append`` by using a native loop instead of callback mapping.
+
+
+v3.3.0 (2015-07-23)
+-------------------
+
+- Add ``ceil``.
+- Add ``defaults_deep``.
+- Add ``floor``.
+- Add ``get``.
+- Add ``gt``.
+- Add ``gte``.
+- Add ``is_iterable``.
+- Add ``lt``.
+- Add ``lte``.
+- Add ``map_keys``.
+- Add ``method``.
+- Add ``method_of``.
+- Add ``mod_args``.
+- Add ``set_``.
+- Add ``unzip_with``.
+- Add ``zip_with``.
+- Make ``add`` support adding two numbers if passed in positionally.
+- Make ``get`` main definition and ``get_path`` its alias.
+- Make ``set_`` main definition and ``deep_set`` its alias.
+
+
+v3.2.2 (2015-04-29)
+-------------------
+
+- Catch ``AttributeError`` in ``helpers.get_item`` and return default value if set.
+
+
+v3.2.1 (2015-04-29)
+-------------------
+
+- Fix bug in ``reduce_right`` where collection was not reversed correctly.
+
+
+v3.2.0 (2015-03-03)
+-------------------
+
+- Add ``sort_by_order`` as alias of ``sort_by_all``.
+- Fix ``is_match`` to not compare ``obj`` and ``source`` types using ``type`` and instead use ``isinstance`` comparisons exclusively.
+- Make ``sort_by_all`` accept an ``orders`` argument for specifying the sort order of each key via boolean ``True`` (for ascending) and ``False`` (for descending).
+- Make ``words`` accept a ``pattern`` argument to override the default regex used for splitting words.
+- Make ``words`` handle single character words better.
+
+
 v3.1.0 (2015-02-28)
 -------------------
 

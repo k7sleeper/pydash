@@ -9,6 +9,7 @@ from .fixtures import parametrize
     (([{'b': 4}, {'b': 5}, {'b': 6}], 'b'), 15),
     (([0, 14, 0.2],), 14.2),
     (({'one': {'a': 1}, 'two': {'a': 2}, 'three': {'a': 3}}, 'a'), 6),
+    ((5, 3), 8),
 ])
 def test_add(case, expected):
     assert _.add(*case) == expected
@@ -37,6 +38,26 @@ def test_average(case, expected):
 ])
 def test_average_aliases(case):
     assert _.average is case
+
+
+@parametrize('case,expected', [
+    ((4.006,), 5),
+    ((6.004, 2), 6.01),
+    ((6040, -2), 6100),
+    (([4.006, 6.004], 2), [4.01, 6.01]),
+])
+def test_ceil(case, expected):
+    assert _.ceil(*case) == expected
+
+
+@parametrize('case,expected', [
+    ((4.006,), 4),
+    ((0.046, 2), 0.04),
+    ((4060, -2), 4000),
+    (([4.006, 0.046], 2), [4.0, 0.04]),
+])
+def test_floor(case, expected):
+    assert _.floor(*case) == expected
 
 
 @parametrize('case,expected', [
@@ -97,7 +118,7 @@ def test_round_(case, expected):
 @parametrize('case', [
     _.curve
 ])
-def test_round__aliases(case):
+def test_round_aliases(case):
     assert _.round_ is case
 
 

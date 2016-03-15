@@ -26,57 +26,44 @@ class _NoValue(object):
 NoValue = _NoValue()
 
 
-def call_callback(callback, *args):
+def callit(callback, *args, **kargs):
     """Inspect argspec of `callback` function and only pass the supported
     arguments when calling it.
     """
     maxargs = len(args)
-    argspec = None
-
-    try:
-        argspec = inspect.getargspec(callback)
-    except TypeError:
-        try:
-            argspec = inspect.getargspec(getattr(callback, '__call__', None))
-        except TypeError:  # pragma: no cover
-            pass
-    finally:
-        if isinstance(callback, type):
-            # Only pass single argument to type callbacks. This is for things
-            # like int(), float(), str(), etc.
-            argcount = 1
-        elif pyd.is_builtin(callback):
-            argcount = guess_builtin_argcount(callback) or maxargs
-        elif argspec and argspec.varargs:
-            # Callback supports variable arguments.
-            argcount = maxargs
-        elif argspec:
-            # Use inspected arg count.
-            argcount = len(argspec.args)
-        else:  # pragma: no cover
-            argcount = maxargs
-
+    argcount = (kargs['argcount'] if 'argcount' in kargs
+                else getargcount(callback, maxargs))
     argstop = min([maxargs, argcount])
 
     return callback(*args[:argstop])
 
 
-def guess_builtin_argcount(obj):
-    """Return guess as to how many arguments can be supplied to a builtin
-    function or method. This relies on the fact that the docstring for builtins
-    follows a predictable pattern.
-    """
-    try:
-        # Try to split the arguments between the first set of "(...)" which
-        # would correspond to argument list of the function.
-        count = len((re.search(r'\((.+)\)',
-                               obj.__doc__.split('\n')[0])
-                     .groups()[0]
-                     .split(',')))
-    except Exception:  # pragma: no cover pylint: disable=broad-except
-        count = None
+def getargcount(callback, maxargs):
+    """Return argument count of callback function."""
+    if hasattr(callback, '_argcount'):
+        # Optimization feature where argcount of callback is known and properly
+        # set by initator.
+        return callback._argcount
 
-    return count
+    argspec = None
+
+    if isinstance(callback, type) or pyd.is_builtin(callback):
+        # Only pass single argument to type callbacks or builtins.
+        argcount = 1
+    else:
+        try:
+            argspec = inspect.getargspec(callback)
+
+            if argspec and not argspec.varargs:
+                # Use inspected arg count.
+                argcount = len(argspec.args)
+            else:
+                # Assume all args are handleable
+                argcount = maxargs
+        except TypeError:  # pragma: no cover
+            argcount = 1
+
+    return argcount
 
 
 def itercallback(obj, callback=None, reverse=False):
@@ -87,8 +74,14 @@ def itercallback(obj, callback=None, reverse=False):
     if reverse:
         items = reversed(tuple(items))
 
+    # Precompute argcount to avoid repeated calculations during callback loop.
+    argcount = getargcount(cbk, maxargs=3)
+
     for key, item in items:
-        yield (call_callback(cbk, item, key, obj), item, key, obj)
+        yield (callit(cbk, item, key, obj, argcount=argcount),
+               item,
+               key,
+               obj)
 
 
 def iterator(obj):
@@ -123,8 +116,8 @@ def get_item(obj, key, default=NoValue):
         mixed: `obj[key]` or `default`.
 
     Raises:
-        KeyError|IndexError|TypeError: If `obj` is missing key or index and no
-            default value provided.
+        KeyError|IndexError|TypeError|AttributeError: If `obj` is missing key
+            or index and no default value provided.
     """
     try:
         try:
@@ -133,7 +126,7 @@ def get_item(obj, key, default=NoValue):
             # It's possible that a string integer is being used to access a
             # list index. Re-try object access using casted integer.
             ret = obj[int(key)]
-    except (KeyError, IndexError, TypeError):
+    except (KeyError, IndexError, TypeError, AttributeError):
         if default is not NoValue:
             ret = default
         else:  # pragma: no cover
